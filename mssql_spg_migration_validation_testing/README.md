@@ -39,18 +39,37 @@ The skill needs DDL scripts for both sides of the migration before validation ca
 
 ---
 
-## How to run
+## How to install
 
-All workflows are driven through Cortex Code (CoCo). Install the skill first, then use natural language prompts — CoCo invokes the scripts internally.
+### Option 1 — Install from GitHub (recommended)
 
-### Install the skill
+In Cortex Code (CoCo), run:
 
-In CoCo, run:
+```
+/github-plugin-installer https://github.com/sfc-gh-rkhandhadia/spg_migration
+```
+
+CoCo will clone the repo and register the skill automatically.
+
+### Option 2 — Install from a local folder
+
+If you have already cloned the repo locally:
+
+```
+/local-plugin-installer /path/to/spg_migration/mssql_spg_migration_validation_testing
+```
+
+### Verify the install
+
+After installing, confirm the skill is available:
+
 ```
 /find-skill mssql_spg_migration_validation_testing
 ```
 
-Or install directly from this repo using the GitHub plugin installer.
+---
+
+## How to run
 
 ### Run full validation and generate reports
 
