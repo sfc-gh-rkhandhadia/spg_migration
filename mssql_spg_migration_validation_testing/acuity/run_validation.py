@@ -13,8 +13,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-# Regex for plain PostgreSQL identifiers (no quoting quirks)
-_SAFE_PG_IDENT = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+# Regex for identifiers PostgreSQL normalises to lowercase.
+# Covers letters, digits, underscores, and dollar signs (valid unquoted PG
+# identifier characters per SQL:2003 and the PostgreSQL docs).  Names that
+# contain anything else — most commonly hyphens or spaces — must be
+# double-quoted with their original case preserved.
+_SAFE_PG_IDENT = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_$]*$')
 
 
 def pg_name(name: str) -> str:
