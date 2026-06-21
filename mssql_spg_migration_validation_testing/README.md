@@ -41,61 +41,52 @@ The skill needs DDL scripts for both sides of the migration before validation ca
 
 ## How to run
 
-### Run full validation
+All workflows are driven through Cortex Code (CoCo). Install the skill first, then use natural language prompts — CoCo invokes the scripts internally.
 
-```bash
-bash scripts/run_validation.sh
+### Install the skill
+
+In CoCo, run:
+```
+/find-skill mssql_spg_migration_validation_testing
 ```
 
-This runs validation for triggers, views, and procedures/functions against both MSSQL and SPG and writes results to `validation.validation_result` in SPG.
+Or install directly from this repo using the GitHub plugin installer.
 
-### Load test data into SPG
+### Run full validation and generate reports
 
-```bash
-python3 scripts/load_mssql_to_spg.py
-```
-
-Copies rows from MSSQL into SPG — drops foreign keys, truncates, inserts, restores foreign keys. Does **not** deploy any DDL.
-
-### Regenerate reports only (no re-validation)
-
-```bash
-bash scripts/run_compare_and_reports.sh
-```
-
-Reads the latest validation results from SPG and generates:
-- `Migration_Validation_<date>.md` — Markdown report
-- `Migration_Validation_<date>.pptx` — PowerPoint report
-
----
-
-## Prompt examples
-
-Use these prompts in Cortex Code (CoCo) after installing the skill:
-
-**Run full validation and generate reports:**
 ```
 /mssql_spg_migration_validation_testing
 
-Validate the MSSQL to SPG migration for my MENU_MANAGEMENT database.
-MSSQL is at localhost:1434 (sa / MyPassword).
-SPG host is abc123.snowflakecomputing.app (snowflake_admin / MyPassword).
-Output reports to /path/to/output/
+Validate the MSSQL to SPG migration for my <database name> database.
+MSSQL DDL scripts are at <path to sql scripts>.
+SPG host is <host>.snowflakecomputing.app (user: snowflake_admin).
+Output reports to <output folder path>.
 ```
 
-**Regenerate reports from existing validation results:**
+### Regenerate reports from existing validation results
+
 ```
-Regenerate the markdown and PowerPoint reports using the latest validation
-run results in SPG. Output to /path/to/output/
+Regenerate the markdown and PowerPoint migration reports using the
+latest validation results already stored in SPG.
+Output to <output folder path>.
 ```
 
-**Investigate a specific failure:**
+### Load test data into SPG
+
 ```
-The validation shows stg.p_microsloadlog_update is FAIL. What is the
-reason and how do I fix it?
+Load data from MSSQL into SPG for the <database name> database so
+procedures and functions have rows to work with during validation.
 ```
 
-**Add a reclassification rule:**
+### Investigate a specific failure
+
+```
+The validation shows <schema.object_name> has verdict FAIL / SPG_ERROR.
+What is the reason and how do I fix it?
+```
+
+### Add a reclassification rule
+
 ```
 Several procedures are showing BOTH_FAILED because they depend on a
 staging row that isn't seeded. Add a rule to alternate_flow_rules.yaml
