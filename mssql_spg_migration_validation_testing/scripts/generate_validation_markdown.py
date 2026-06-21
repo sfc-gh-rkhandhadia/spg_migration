@@ -931,9 +931,9 @@ A('')
 
 A('#### 2.5.2 Column / Parameter Mismatch (FAIL)')
 A('')
-A(f'> {len(fail_rows)} objects — execution succeeded but columns differ.')
-A('> **Root cause:** SPG functions return columns with `out_` prefix.  '
-  '**Fix:** Remove `out_` from `RETURNS TABLE(...)` column definitions.')
+A(f'> {len(fail_rows)} objects — execution succeeded but output columns differ.')
+if fail_rows:
+    A('> Inspect the error_message column in `validation.validation_result` for the specific mismatch.')
 A('')
 A('| Object | Schema | Type | Columns Only in MSSQL (sample) |')
 A('|--------|--------|------|-------------------------------|')
@@ -962,8 +962,8 @@ other_bf = [r for r in both_fail if r not in stg_bf]
 A('#### 2.5.4 Both Sides Failed (BOTH_FAILED)')
 A('')
 A(f'> {len(both_fail)} objects where both MSSQL and SPG failed. '
-  'Environment-dependent failures (requiring active job records) indicate '
-  'behavioural parity — not a migration defect.')
+  'If both fail for the same environmental reason (missing prerequisite state) '
+  'this indicates behavioural parity, not a migration defect.')
 A('')
 if stg_bf:
     A(f'**Environment-dependent failures ({len(stg_bf)} objects):**')
@@ -1199,8 +1199,8 @@ A('### 2.6 Remediation Plan')
 A('')
 A('| Priority | Category | Count | Recommended Fix |')
 A('|----------|----------|------:|-----------------|')
-A(f'| 🔴 P1 — High | Column `out_` prefix on SPG function RETURNS TABLE | {len(fail_rows)} | Remove `out_` prefix from all `RETURNS TABLE` column names |')
-A(f'| 🔴 P1 — High | SPG function/procedure body errors | {len(spg_err_rows)} | See §3.1 — individual fixes per object |')
+A(f'| 🔴 P1 — High | Column / output mismatch (FAIL) | {len(fail_rows)} | Inspect error_message in validation_result for specific fix |')
+A(f'| 🔴 P1 — High | SPG function/procedure body errors | {len(spg_err_rows)} | See §2.5.1 — individual fixes per object |')
 A(f'| 🟠 P2 — Medium | PROCEDURE → FUNCTION conversion needed | {len(no_rs_rows)} | Re-create as `CREATE FUNCTION ... RETURNS TABLE(...)` |')
 A(f'| 🟡 P3 — Low | View data hash mismatch | {view_fail} | Investigate sort order or data type formatting differences |')
 A(f'| 🔷 P4 — Backlog | Objects not yet migrated | {len(mssql_only_p)} | Complete migration |')
