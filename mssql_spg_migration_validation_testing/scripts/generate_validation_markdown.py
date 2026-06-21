@@ -64,7 +64,7 @@ DATE_SUFFIX = datetime.now().strftime('%Y%m%d')
 PASS_V    = {'PASS', 'PASS_DML_PROC', 'PASS_WRITE_PROC', 'WRITE_EXPECTED_FAIL'}
 # MSSQL_ONLY = object exists in MSSQL but was not migrated to SPG → counts as FAIL
 # SPG_ONLY   = extra object in SPG not in MSSQL → informational, excluded from Pass %
-FAIL_V    = {'FAIL', 'SPG_ERROR', 'SPG_NO_RESULTSET', 'MSSQL_ERROR',
+FAIL_V    = {'FAIL', 'FAIL_DATA', 'FAIL_CONVERSION', 'SPG_ERROR', 'SPG_NO_RESULTSET', 'MSSQL_ERROR',
              'BOTH_FAILED', 'ERROR', 'WARN', 'MSSQL_ONLY',
              'WRITE_SPG_ERROR', 'WRITE_BOTH_FAILED', 'WRITE_MSSQL_ERROR'}
 SKIP_V    = {'SKIPPED'}
@@ -799,9 +799,29 @@ A('> **Pass** = outputs match.  **Fail** = mismatch or error.  **Not migrated** 
 A('')
 A(f'| Object Type | # in MSSQL | Executable | ✅ Pass | ❌ Fail | Not Migrated | Pass % |')
 A(f'|-------------|----------:|-----------:|-------:|-------:|-------------:|-------:|')
-A(f'| Triggers | {len(trig_rows)} | {len(trig_rows)} | {trig_pass} | {trig_fail} | 0 | **{pct(trig_pass, trig_fail)}** |')
-A(f'| Views | {len(view_rows)} | {len(view_rows)} | {view_pass} | {view_fail} | 0 | **{pct(view_pass, view_fail)}** |')
-A(f'| Procedures & Functions | {len(proc_rows)} | {proc_testable} | {proc_pass} | {proc_fail} | {proc_miss} | **{pct(proc_pass, proc_fail)}** |')
+
+# Filter each row list by the specific object type so the summary reflects
+# per-category counts even when all object types share a single run number.
+_trig_beh = [r for r in trig_rows if r.get('object_type', '').upper() == 'TRIGGER']
+_view_beh = [r for r in view_rows if r.get('object_type', '').upper() == 'VIEW']
+_pf_beh   = [r for r in proc_rows if r.get('object_type', '').upper() in ('PROCEDURE', 'FUNCTION')]
+
+_trig_pass = sum(1 for r in _trig_beh if r['test_verdict'] in PASS_V)
+_trig_fail = sum(1 for r in _trig_beh if r['test_verdict'] in FAIL_V)
+_view_pass = sum(1 for r in _view_beh if r['test_verdict'] in PASS_V)
+_view_fail = sum(1 for r in _view_beh if r['test_verdict'] in FAIL_V)
+_pf_pass   = sum(1 for r in _pf_beh   if r['test_verdict'] in PASS_V)
+_pf_fail   = sum(1 for r in _pf_beh   if r['test_verdict'] in FAIL_V)
+_pf_miss   = sum(1 for r in _pf_beh   if r['test_verdict'] in MISSING_V)
+
+_tbl_beh  = [r for r in trig_rows if r.get('object_type', '').upper() == 'TABLE']
+_tbl_pass = sum(1 for r in _tbl_beh if r['test_verdict'] in PASS_V)
+_tbl_fail = sum(1 for r in _tbl_beh if r['test_verdict'] in FAIL_V)
+
+A(f'| Tables | {len(_tbl_beh)} | {len(_tbl_beh)} | {_tbl_pass} | {_tbl_fail} | 0 | **{pct(_tbl_pass, _tbl_fail)}** |')
+A(f'| Triggers | {len(_trig_beh)} | {len(_trig_beh)} | {_trig_pass} | {_trig_fail} | 0 | **{pct(_trig_pass, _trig_fail)}** |')
+A(f'| Views | {len(_view_beh)} | {len(_view_beh)} | {_view_pass} | {_view_fail} | 0 | **{pct(_view_pass, _view_fail)}** |')
+A(f'| Procedures & Functions | {len(_pf_beh)} | {len(_pf_beh) - _pf_miss} | {_pf_pass} | {_pf_fail} | {_pf_miss} | **{pct(_pf_pass, _pf_fail)}** |')
 A('')
 A('> **Pass %** = Pass ÷ (Pass + Fail). Not-migrated objects excluded from the denominator.')
 A('')
