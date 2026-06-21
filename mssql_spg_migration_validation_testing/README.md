@@ -104,14 +104,6 @@ The validation shows <schema.object_name> has verdict FAIL / SPG_ERROR.
 What is the reason and how do I fix it?
 ```
 
-### Add a reclassification rule
-
-```
-Several procedures are showing BOTH_FAILED because they depend on a
-staging row that isn't seeded. Add a rule to alternate_flow_rules.yaml
-to reclassify them as FAIL_MISSING_PREREQ.
-```
-
 ---
 
 ## Verdict taxonomy
