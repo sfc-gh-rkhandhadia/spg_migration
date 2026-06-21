@@ -830,7 +830,9 @@ A('')
 A('> Execution results per schema — triggers, views, procedures, and functions only.')
 A('> Structural objects (tables, indexes) are in Part 1.')
 A('')
-_beh_rows = [r for r in (trig_rows + view_rows + proc_rows)
+# Use all_results (deduplicated) — avoids triple-counting when trig/view/proc
+# runs all share the same run number (single-run workflow like Acuity).
+_beh_rows = [r for r in all_results
              if (r.get('source_schema') or '').lower() in BUSINESS_SCHEMAS]
 A(summary_table(_beh_rows))
 A('')
@@ -840,13 +842,13 @@ A('')
 # ── Section 1: Triggers ────────────────────────────────────────────────────────
 A('### 2.3 Trigger Validation')
 A('')
-A(summary_table(trig_rows))
+A(summary_table(_trig_beh))
 A('')
 A('#### 2.3.1 Detail')
 A('')
 A('| Object | Table | Events | Verdict |')
 A('|--------|-------|--------|---------|')
-for r in sorted(trig_rows, key=lambda x: (x['test_verdict'] != 'PASS', x['object_name'])):
+for r in sorted(_trig_beh, key=lambda x: (x['test_verdict'] != 'PASS', x['object_name'])):
     parts  = (r.get('source_call') or '').split(' ', 1)
     table  = parts[1].split(' ')[0] if len(parts) > 1 else ''
     events = ' '.join(parts[1].split(' ')[1:]) if len(parts) > 1 else ''
@@ -856,23 +858,23 @@ A('---')
 A('')
 
 # ── Section 2: Views ───────────────────────────────────────────────────────────
-ms_v_cnt  = sum(1 for r in view_rows) + len([r for r in view_rows if r['test_verdict'] in MISSING_V])
+ms_v_cnt  = len(_view_beh) + sum(1 for r in _view_beh if r['test_verdict'] in MISSING_V)
 A('### 2.4 View Validation')
 A('')
-A(summary_table(view_rows))
+A(summary_table(_view_beh))
 A('')
 A('#### 2.4.1 Failing Views')
 A('')
 A('| View | MSSQL Rows | SPG Rows | Issue |')
 A('|------|----------:|--------:|-------|')
-for r in sorted(view_rows, key=lambda x: x['object_name']):
+for r in sorted(_view_beh, key=lambda x: x['object_name']):
     if r['test_verdict'] not in FAIL_V: continue
     iss = clean('; '.join((r.get('issues') or [])[:2]), 180)
     A(f"| `{r['object_name']}` | {r.get('source_row_count','?')} | {r.get('target_row_count','?')} | {iss} |")
 A('')
 A('#### 2.4.2 Not Migrated to SPG')
 A('')
-mssql_only_v = [r for r in view_rows if r['test_verdict'] in MISSING_V]
+mssql_only_v = [r for r in _view_beh if r['test_verdict'] in MISSING_V]
 if mssql_only_v:
     A('| View | Schema |')
     A('|------|--------|')
@@ -883,12 +885,12 @@ else:
 A('')
 A('#### 2.4.3 All Passing Views')
 A('')
-pass_view_count = sum(1 for r in view_rows if r['test_verdict'] in PASS_V)
+pass_view_count = sum(1 for r in _view_beh if r['test_verdict'] in PASS_V)
 A(f'<details><summary>Click to expand — {pass_view_count} passing views</summary>')
 A('')
 A('| View | Schema | MSSQL Rows | SPG Rows |')
 A('|------|--------|----------:|--------:|')
-for r in sorted(view_rows, key=lambda x: (x['source_schema'], x['object_name'])):
+for r in sorted(_view_beh, key=lambda x: (x['source_schema'], x['object_name'])):
     if r['test_verdict'] not in PASS_V: continue
     A(f"| `{r['object_name']}` | `{r['source_schema']}` | {r.get('source_row_count','?')} | {r.get('target_row_count','?')} |")
 A('')
@@ -901,8 +903,7 @@ A('')
 # Filter to proc/function types only — exclude VIEW rows that may share the same run number
 PROC_TYPES = {'PROCEDURE', 'FUNCTION', 'SCALAR_FUNCTION', 'TVF', 'INLINE_TVF',
               'PROC_TO_FUNC', 'PASS_DML_PROC', 'SCALAR'}
-proc_rows_pf = [r for r in proc_rows
-                if r.get('object_type', '').upper() not in ('VIEW', 'TRIGGER')]
+proc_rows_pf = _pf_beh  # already filtered to PROCEDURE/FUNCTION only
 
 A('### 2.5 Procedure & Function Validation')
 A('')
