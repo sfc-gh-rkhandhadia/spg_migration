@@ -17,86 +17,14 @@ Validates that stored procedures, functions, views, and triggers produce identic
 
 ## Prerequisites
 
-### 1. Source: SQL Server (MSSQL)
+| Requirement | Notes |
+|-------------|-------|
+| **Docker Desktop** | Used to run SQL Server locally — the skill handles container setup automatically |
+| **Python 3.9+** | Required to run the validation and reporting scripts |
+| **Cortex Code (CoCo)** | The skill is invoked from CoCo; install via the skill catalog |
+| **Snowflake account** | With a Snowflake Postgres (SPG) instance provisioned |
 
-You need a running SQL Server instance with the source database. The easiest way is Docker:
-
-```bash
-docker run -d --name mssql \
-  -e ACCEPT_EULA=Y \
-  -e SA_PASSWORD=YourPassword123! \
-  -p 1434:1433 \
-  mcr.microsoft.com/mssql/server:2022-latest
-```
-
-Load your DDL scripts into the `MENU_MANAGEMENT` database (or your source DB name).
-
-### 2. Target: Snowflake Postgres (SPG)
-
-- Create a Snowflake Postgres instance in your Snowflake account
-- Deploy the converted DDL (tables, views, procedures, functions, triggers) into the `postgres` database
-- SPG user must have `CREATE SCHEMA` and full DML privileges
-
-### 3. Python dependencies
-
-```bash
-pip install pymssql psycopg2-binary pyyaml python-pptx
-```
-
-### 4. Validation schema in SPG
-
-Create the validation tracking schema once:
-
-```sql
-CREATE SCHEMA IF NOT EXISTS validation;
-
-CREATE TABLE IF NOT EXISTS validation.validation_run (
-    run_id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    run_number SERIAL,
-    object_type TEXT,
-    run_started_at TIMESTAMPTZ DEFAULT now(),
-    run_completed_at TIMESTAMPTZ,
-    total_objects INT DEFAULT 0,
-    pass_count INT DEFAULT 0,
-    fail_count INT DEFAULT 0,
-    skip_count INT DEFAULT 0,
-    run_status TEXT DEFAULT 'RUNNING'
-);
-
-CREATE TABLE IF NOT EXISTS validation.validation_result (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    run_id UUID REFERENCES validation.validation_run(run_id),
-    run_number INT,
-    object_type TEXT,
-    source_schema TEXT,
-    object_name TEXT,
-    test_verdict TEXT,
-    mssql_rows INT,
-    spg_rows INT,
-    issues TEXT,
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### 5. Environment variables
-
-Create a `.env` file or export these before running:
-
-```bash
-export MSSQL_HOST=localhost
-export MSSQL_PORT=1434
-export MSSQL_USER=sa
-export MSSQL_PASSWORD=YourPassword123!
-export MSSQL_DB=MENU_MANAGEMENT
-
-export SPG_HOST=<your-spg-host>.snowflakecomputing.app
-export SPG_PORT=5432
-export SPG_USER=snowflake_admin
-export SPG_PASSWORD=<your-spg-password>
-export SPG_DATABASE=postgres
-
-export MSSQL_SPG_SHARED_DIR=/path/to/this/scripts/folder
-```
+> The skill takes care of SQL Server container creation, DDL deployment, data loading, and validation schema setup — you do not need to configure these manually.
 
 ---
 
