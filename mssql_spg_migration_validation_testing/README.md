@@ -24,7 +24,18 @@ Validates that stored procedures, functions, views, and triggers produce identic
 | **Cortex Code (CoCo)** | The skill is invoked from CoCo; install via the skill catalog |
 | **Snowflake account** | With a Snowflake Postgres (SPG) instance provisioned |
 
-> The skill takes care of SQL Server container creation, DDL deployment, data loading, and validation schema setup — you do not need to configure these manually.
+> The skill handles SQL Server container creation, data loading, and validation schema setup automatically — you do not need to configure these manually.
+
+### DDL inputs required
+
+The skill needs DDL scripts for both sides of the migration before validation can run:
+
+| Input | Description |
+|-------|-------------|
+| **MSSQL DDL** | Original SQL Server scripts (`.sql` files) — tables, views, stored procedures, functions, triggers. The skill deploys these into the local SQL Server container. |
+| **SPG DDL** | Converted Postgres-compatible scripts — either provided by you or already deployed into the SPG instance. If the SPG instance already has the converted objects deployed, no DDL files are needed. |
+
+> If you have not yet converted your MSSQL DDL to Postgres, use the `mssql-ddl-realization` skill first to parse, convert, and deploy the DDL to SPG before running this validation skill.
 
 ---
 
