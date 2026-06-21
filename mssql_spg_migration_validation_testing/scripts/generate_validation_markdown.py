@@ -954,40 +954,19 @@ for r in sorted(no_rs_rows, key=lambda x: (x['source_schema'], x['object_name'])
     A(f"| `{r['object_name']}` | `{r['source_schema']}` |")
 A('')
 
-stg_bf   = [r for r in both_fail
-            if 'Conversion failed'        in str(r.get('error_message', ''))
-            or 'MicrosLoad_GetJobStatusId' in str(r.get('error_message', ''))]
-other_bf = [r for r in both_fail if r not in stg_bf]
-
 A('#### 2.5.4 Both Sides Failed (BOTH_FAILED)')
 A('')
 A(f'> {len(both_fail)} objects where both MSSQL and SPG failed. '
   'If both fail for the same environmental reason (missing prerequisite state) '
   'this indicates behavioural parity, not a migration defect.')
 A('')
-if stg_bf:
-    A(f'**Environment-dependent failures ({len(stg_bf)} objects):**')
-    A('')
-    A('<details><summary>Click to expand</summary>')
-    A('')
-    A('| Object | Root Cause |')
-    A('|--------|-----------|')
-    for nm, sc in sorted(set((r['object_name'], r['source_schema']) for r in stg_bf)):
-        A(f'| `{sc}.{nm}` | Requires active job record in source table |')
-    A('')
-    A('</details>')
-    A('')
-if other_bf:
-    A(f'**Other BOTH_FAILED ({len(other_bf)} objects):**')
-    A('')
+if both_fail:
     A('| Object | Schema | MSSQL Error | SPG Error |')
     A('|--------|--------|-------------|-----------|')
-    for r in sorted(other_bf, key=lambda x: (x['source_schema'], x['object_name'])):
-        msg   = clean(r.get('error_message', ''), 200)
-        parts = msg.split('| SPG:')
-        ms_e  = parts[0].replace('MSSQL:', '').strip()[:80]
-        sg_e  = parts[1].strip()[:80] if len(parts) > 1 else ''
-        A(f"| `{r['object_name']}` | `{r['source_schema']}` | {ms_e} | {sg_e} |")
+    for r in sorted(both_fail, key=lambda x: (x['source_schema'], x['object_name'])):
+        ms_err = clean(r.get('mssql_status') or '', 100)
+        sp_err = clean(r.get('error_message') or (r.get('issues') or [''])[0], 100)
+        A(f"| `{r['object_name']}` | `{r['source_schema']}` | {ms_err} | {sp_err} |")
     A('')
 
 A('#### 2.5.5 Not Yet Migrated (MSSQL-Only)')
