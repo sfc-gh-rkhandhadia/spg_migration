@@ -8,7 +8,7 @@ Usage:
     python3 generate_migration_report.py \
         --client "YourClientName" \
         --author "Rekha Khandhadia" \
-        --spg-host "your-spg-host.snowflakecomputing.app" \
+        --spg-host "vzx5evys2zco7olfkgxye6s5nq.sfsenorthamerica-rkhandhadia-aws1.us-east-1.aws.postgres.snowflake.app" \
         --spg-password "your_password" \
         --run-numbers "1,2,3"          # optional: default = latest 3
 

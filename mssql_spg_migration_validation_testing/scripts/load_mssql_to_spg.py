@@ -7,24 +7,25 @@ import re
 from pathlib import Path
 from datetime import datetime
 
+import os
 import pymssql
 import psycopg2
 import psycopg2.extras
 psycopg2.extras.register_uuid()
 
-MSSQL_HOST = "localhost"
-MSSQL_PORT = 1434
-MSSQL_USER = "sa"
-MSSQL_PASS = "REDACTED_MSSQL_PASSWORD"
-MSSQL_DB = "MENU_MANAGEMENT"
+MSSQL_HOST = os.environ.get("MSSQL_HOST", "localhost")
+MSSQL_PORT = int(os.environ.get("MSSQL_PORT", "1434"))
+MSSQL_USER = os.environ["MSSQL_USER"]
+MSSQL_PASS = os.environ["MSSQL_PASSWORD"]
+MSSQL_DB   = os.environ["MSSQL_DATABASE"]
 
-SPG_HOST = "your-spg-host.snowflakecomputing.app"
-SPG_PORT = 5432
-SPG_USER = "snowflake_admin"
-SPG_PASS = "REDACTED_SPG_PASSWORD"
-SPG_DB = "postgres"
+SPG_HOST   = os.environ["SPG_HOST"]
+SPG_PORT   = int(os.environ.get("SPG_PORT", "5432"))
+SPG_USER   = os.environ["SPG_USER"]
+SPG_PASS   = os.environ["SPG_PASSWORD"]
+SPG_DB     = os.environ["SPG_DATABASE"]
 
-SHARED_DIR = Path("/Users/rkhandhadia/Documents/Armtrack/shared-workflow")
+SHARED_DIR = Path(os.environ.get("MSSQL_SPG_SHARED_DIR", str(Path(__file__).parent)))
 
 inv = json.loads((SHARED_DIR / "object_inventory.json").read_text())
 
@@ -207,8 +208,7 @@ if skipped[:5]:
         print(f"  {s}")
 
 summary = {
-    "workload": "MENU_MANAGEMENT",
-    "mssql_source": f"{MSSQL_HOST}:{MSSQL_PORT}",
+    "workload": MSSQL_DB,
     "spg_target": SPG_HOST,
     "tables_loaded": len(rows_loaded),
     "tables_skipped": len(skipped),
@@ -220,8 +220,7 @@ summary = {
 }
 (SHARED_DIR / "load_summary.json").write_text(json.dumps(summary, indent=2))
 (SHARED_DIR / "load_manifest.json").write_text(json.dumps({
-    "workload": "MENU_MANAGEMENT",
-    "mssql_host": f"{MSSQL_HOST}:{MSSQL_PORT}", "mssql_db": MSSQL_DB,
+    "workload": MSSQL_DB, "mssql_host": f"{MSSQL_HOST}:{MSSQL_PORT}", "mssql_db": MSSQL_DB,
     "spg_host": SPG_HOST, "spg_db": SPG_DB,
     "tables_loaded": len(rows_loaded), "total_rows": total,
     "fks_dropped": fk_dropped,
