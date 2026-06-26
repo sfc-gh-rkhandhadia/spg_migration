@@ -1,66 +1,92 @@
-#!/usr/bin/env bash
-# pre-commit: block commits that contain hardcoded credentials
-# Catches passwords, SPG endpoints, and common secret patterns.
+#!/usr/bin/env python3
+"""
+pre-commit hook — blocks commits containing hardcoded credentials or secrets.
+Works on macOS (BSD grep) and Linux.
+Install: bash scripts/install-hooks.sh
+"""
+import subprocess, sys, re, os
 
-set -e
+RED    = "\033[0;31m"
+YELLOW = "\033[1;33m"
+NC     = "\033[0m"
 
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+PATTERNS = [
+    ("Hardcoded password env-var assignment",
+     r"""os\.environ\s*\[\s*['"][^'"]*(?:PASSWORD|PASS|SECRET|TOKEN)[^'"]*['"]\s*\]\s*=\s*['"][^'"\$\{]{4,}"""),
+    ("SPG .snowflake.app hostname in source",
+     r"\.aws\.postgres\.snowflake\.app"),
+    ("Generic password= literal (16+ chars)",
+     r"""(?i)password\s*=\s*['"][A-Za-z0-9+/!@#%^&*]{16,}['"]"""),
+    ("High-entropy base64-like token (40+ chars)",
+     r"[A-Za-z0-9+/]{40,}={0,2}(?:[^A-Za-z0-9+/=]|$)"),
+    ("Private key header",
+     r"-----BEGIN\s+(?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+    (".env file being committed",
+     r"^\.env$"),
+]
 
-STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+def staged_files():
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+        capture_output=True, text=True
+    )
+    return [f.strip() for f in result.stdout.splitlines() if f.strip()]
 
-if [ -z "$STAGED" ]; then
-  exit 0
-fi
+def file_content(path):
+    result = subprocess.run(
+        ["git", "show", f":{path}"],
+        capture_output=True, text=True, errors="replace"
+    )
+    return result.stdout if result.returncode == 0 else ""
 
-FAIL=0
+def is_binary(path):
+    result = subprocess.run(
+        ["git", "show", f":{path}"],
+        capture_output=True
+    )
+    chunk = result.stdout[:8000]
+    return b"\x00" in chunk
 
-# ── Pattern list ─────────────────────────────────────────────────────────────
-# Each entry: "description|regex"
-PATTERNS=(
-  "Hardcoded password assignment|os\.environ\[.*(PASSWORD|PASS|SECRET|TOKEN).*\]\s*=\s*['\"][^'\"\$\{]"
-  "SPG .snowflake.app hostname in source|\.aws\.postgres\.snowflake\.app"
-  "Generic password= value in source|password\s*=\s*['\"][A-Za-z0-9+/]{16,}['\"]"
-  "AWS secret key pattern|[A-Za-z0-9/+]{40}(?=[^A-Za-z0-9/+]|$)"
-  "Private key header|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"
-  ".env file committed|^\.env$"
-)
+blocked = False
 
-for STAGED_FILE in $STAGED; do
-  # Skip binary files
-  if git diff --cached --name-only --diff-filter=ACM -- "$STAGED_FILE" | \
-     xargs -I{} git show ":$STAGED_FILE" 2>/dev/null | file - | grep -qiE "binary|image|zip|pdf"; then
-    continue
-  fi
+for staged in staged_files():
+    # Skip binary files and example/template files
+    if is_binary(staged):
+        continue
+    if staged.endswith((".env.example", ".example", ".sample")):
+        continue
 
-  CONTENT=$(git show ":$STAGED_FILE" 2>/dev/null || true)
+    content = file_content(staged)
 
-  for PATTERN_ENTRY in "${PATTERNS[@]}"; do
-    DESC="${PATTERN_ENTRY%%|*}"
-    REGEX="${PATTERN_ENTRY##*|}"
+    for desc, pattern in PATTERNS:
+        # For .env filename check, match against the path
+        if ".env file" in desc:
+            if re.search(pattern, os.path.basename(staged)):
+                print(f"{RED}BLOCKED:{NC} {staged}")
+                print(f"{YELLOW}  Reason: {desc}{NC}")
+                blocked = True
+            continue
 
-    if echo "$CONTENT" | grep -qPi "$REGEX" 2>/dev/null; then
-      echo -e "${RED}BLOCKED: $STAGED_FILE${NC}"
-      echo -e "${YELLOW}  Reason: $DESC${NC}"
-      echo "  Pattern: $REGEX"
-      echo ""
-      FAIL=1
-    fi
-  done
-done
+        matches = list(re.finditer(pattern, content))
+        if matches:
+            print(f"{RED}BLOCKED:{NC} {staged}")
+            print(f"{YELLOW}  Reason: {desc}{NC}")
+            for m in matches[:2]:
+                line_no = content[:m.start()].count("\n") + 1
+                print(f"  Line {line_no}: {m.group(0)[:80]}")
+            print()
+            blocked = True
+            break  # one reason per file is enough
 
-if [ "$FAIL" -eq 1 ]; then
-  echo -e "${RED}Commit blocked — credentials or secrets detected in staged files.${NC}"
-  echo ""
-  echo "  1. Remove hardcoded credentials from the flagged files."
-  echo "  2. Use environment variables or a .env file (which is .gitignored)."
-  echo "  3. Copy scripts/.env.example to scripts/.env and fill in values."
-  echo "  4. Never pass passwords as literal strings in source code."
-  echo ""
-  echo "  If this is a false positive, run:"
-  echo "    git commit --no-verify   (use sparingly and only after manual review)"
-  exit 1
-fi
+if blocked:
+    print(f"{RED}Commit blocked — credentials or secrets detected.{NC}")
+    print()
+    print("  Fix: remove hardcoded values from the flagged files.")
+    print("  Use environment variables or a .env file (which is .gitignored).")
+    print("  Copy scripts/.env.example to scripts/.env and fill in values.")
+    print()
+    print("  To bypass (only after manual review):")
+    print("    git commit --no-verify")
+    sys.exit(1)
 
-exit 0
+sys.exit(0)
