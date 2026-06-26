@@ -45,21 +45,31 @@ sconn.autocommit = True
 mcur = mconn.cursor()
 scur = sconn.cursor()
 
-# Get all tables in SPG (lowercase)
-scur.execute("""
+# Discover user schemas dynamically from the SPG catalog — no hardcoded names.
+# Excludes Postgres/Snowflake system schemas by convention.
+_SPG_SCHEMA_FILTER = (
+    "table_schema NOT IN ('pg_catalog','information_schema','pg_toast','cron','public')"
+    " AND table_schema NOT LIKE 'pg~_%' ESCAPE '~'"
+    " AND table_schema NOT LIKE 'snowflake~_%' ESCAPE '~'"
+    " AND table_schema NOT LIKE '__pg~_%' ESCAPE '~'"
+    " AND table_schema NOT LIKE '__lake~_%' ESCAPE '~'"
+    " AND table_schema NOT LIKE 'extension~_%' ESCAPE '~'"
+)
+
+# Get all user tables in SPG
+scur.execute(f"""
     SELECT table_schema, table_name
     FROM information_schema.tables
-    WHERE table_type='BASE TABLE'
-      AND table_schema IN ('api','stg','dbo','err','svc_menu_management')
+    WHERE table_type='BASE TABLE' AND {_SPG_SCHEMA_FILTER}
 """)
 spg_set = {(r[0], r[1]) for r in scur.fetchall()}
-print(f"SPG tables: {len(spg_set)}")
+print(f"SPG user tables: {len(spg_set)} in schemas: {sorted({s for s,_ in spg_set})}")
 
-# Get identity and bool columns for all SPG tables
-scur.execute("""
+# Get identity and bool columns for all user tables
+scur.execute(f"""
     SELECT table_schema, table_name, column_name, data_type, identity_generation
     FROM information_schema.columns
-    WHERE table_schema IN ('api','stg','dbo','err','svc_menu_management')
+    WHERE {_SPG_SCHEMA_FILTER}
 """)
 spg_col_info = {}
 for schema, tname, colname, dtype, iden in scur.fetchall():
@@ -72,12 +82,11 @@ for schema, tname, colname, dtype, iden in scur.fetchall():
         spg_col_info[key]["bool"].add(colname)
     spg_col_info[key]["cols"].append(colname)
 
-# Drop FK constraints
-scur.execute("""
+# Drop FK constraints from all user schemas (dynamic)
+scur.execute(f"""
     SELECT tc.table_schema, tc.table_name, tc.constraint_name
     FROM information_schema.table_constraints tc
-    WHERE tc.constraint_type='FOREIGN KEY'
-      AND tc.table_schema IN ('api','stg','dbo','err','svc_menu_management')
+    WHERE tc.constraint_type='FOREIGN KEY' AND {_SPG_SCHEMA_FILTER}
 """)
 fks = scur.fetchall()
 fk_dropped = 0
@@ -174,24 +183,33 @@ for i, (schema, name) in enumerate(mssql_tables):
     has_identity = any(c in identity_cols for c in col_names)
 
     quoted_cols = ", ".join(f'"{c}"' for c in col_names)
-    placeholders = ", ".join(["%s"] * len(col_names))
+    # execute_values appends VALUES %s itself — SQL must end before VALUES
     if has_identity:
-        insert_sql = f'INSERT INTO {schema}."{name_lc}" ({quoted_cols}) OVERRIDING SYSTEM VALUE VALUES ({placeholders})'
+        insert_sql = f'INSERT INTO {schema}."{name_lc}" ({quoted_cols}) OVERRIDING SYSTEM VALUE VALUES %s'
     else:
-        insert_sql = f'INSERT INTO {schema}."{name_lc}" ({quoted_cols}) VALUES ({placeholders})'
+        insert_sql = f'INSERT INTO {schema}."{name_lc}" ({quoted_cols}) VALUES %s'
+    row_template = "(" + ", ".join(["%s"] * len(col_names)) + ")"
 
+    # Batch insert using execute_values — orders of magnitude faster than row-by-row
+    batch = [
+        tuple(
+            convert_val(row[idx], col_names[j].lower(), bool_cols)
+            for j, idx in enumerate(col_indices)
+        )
+        for row in rows
+    ]
     loaded = 0
-    for row in rows:
-        vals = [convert_val(row[idx], col_names[j].lower(), bool_cols)
-                for j, idx in enumerate(col_indices)]
-        try:
-            scur.execute(insert_sql, vals)
-            loaded += 1
-        except Exception as e:
-            sconn.rollback()
-            sconn.autocommit = True
-            print(f"  FAIL {schema}.{name}: {str(e)[:120]}")
-            break
+    try:
+        psycopg2.extras.execute_values(
+            scur, insert_sql, batch,
+            template=row_template,
+            page_size=500,
+        )
+        loaded = len(batch)
+    except Exception as e:
+        sconn.rollback()
+        sconn.autocommit = True
+        print(f"  FAIL {schema}.{name}: {str(e)[:120]}")
 
     rows_loaded[f"{schema}.{name}"] = loaded
     total += loaded
