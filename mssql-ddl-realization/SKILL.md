@@ -1,7 +1,7 @@
 ---
-
-## name: mssql-ddl-realization
+name: mssql-ddl-realization
 description: "Given either raw MSSQL DDL supplied by a customer or an existing MSSQL environment, create a complete dependency object graph across constraints, tables, views, functions, and procedures, inspect filter and branch logic inside the code, and generate a small but valid and consistent application dataset so that every in-scope row-producing view, function, and reader-style procedure returns at least one row set, while stateful procedures have runnable prerequisite state established for downstream validation."
+---
 
 # MSSQL DDL Realization and Semantic Data Generation
 

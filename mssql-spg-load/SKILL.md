@@ -1,7 +1,7 @@
 ---
-
-## name: mssql-spg-load
+name: mssql-spg-load
 description: "Load data from a MSSQL source database into a Snowflake Postgres (SPG) instance using the repo's reload utility. Use when: reloading SPG after a reset, syncing MSSQL test data to SPG, running a pg_reload script, loading a source database into SPG, or any time the user says 'load same data', 'reload SPG', 'load data into Snowflake Postgres', or 'sync data'."
+---
 
 # MSSQL → SPG Data Load
 

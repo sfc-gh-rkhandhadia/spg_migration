@@ -1,0 +1,9 @@
+{
+  "name": "spg-migration",
+  "description": "MSSQL to Snowflake Postgres migration skills: DDL realization, data load, end-to-end orchestration, and two-sided parity validation testing.",
+  "version": "1.0.0",
+  "skills": ".",
+  "author": {
+    "name": "sfc-gh-rkhandhadia"
+  }
+}
