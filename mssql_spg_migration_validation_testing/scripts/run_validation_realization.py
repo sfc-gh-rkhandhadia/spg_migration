@@ -1,23 +1,52 @@
 #!/usr/bin/env python3
 """
 run_validation_realization.py
-Full validation runner for RealizationDB -> SPG migration.
-Credentials embedded to avoid shell escaping issues with special chars.
+Full validation runner for an MSSQL -> SPG migration.
+
+All credentials MUST be supplied via environment variables or a .env file.
+Never hardcode credentials in this file.
+
+Usage:
+    # Set env vars then run:
+    export MSSQL_HOST=127.0.0.1
+    export MSSQL_PORT=1433
+    export MSSQL_USER=sa
+    export MSSQL_PASSWORD=<your-password>
+    export MSSQL_DATABASE=<your-db>
+    export SPG_HOST=<your-spg-host>
+    export SPG_USER=snowflake_admin
+    export SPG_PASSWORD=<your-password>
+    export SPG_DATABASE=<your-db>
+    python3 run_validation_realization.py
+
+    # Or copy scripts/.env.example to scripts/.env, fill in values, then run.
 """
 import os, sys, time
 
-# ── Set all credentials as env vars ──────────────────────────────────────────
-os.environ['MSSQL_HOST']     = '127.0.0.1'
-os.environ['MSSQL_PORT']     = '1433'
-os.environ['MSSQL_USER']     = 'sa'
-os.environ['MSSQL_PASSWORD'] = '**REDACTED**'
-os.environ['MSSQL_DATABASE'] = 'RealizationDB'
-os.environ['SPG_HOST']       = 'bectnuwiyna7vfjiqb3pmp5wum.sfsenorthamerica-rkhandhadia-aws1.us-east-1.aws.postgres.snowflake.app'
-os.environ['SPG_USER']       = 'snowflake_admin'
-os.environ['SPG_PASSWORD']   = '**REDACTED-ROTATE-NOW**'
-os.environ['SPG_DATABASE']   = 'postgres'
+# ── Load .env file if present (never commit .env) ────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv optional; rely on environment already set
+
+# ── Validate required credentials are present — no defaults for secrets ───────
+_REQUIRED = [
+    'MSSQL_HOST', 'MSSQL_USER', 'MSSQL_PASSWORD', 'MSSQL_DATABASE',
+    'SPG_HOST',   'SPG_USER',   'SPG_PASSWORD',   'SPG_DATABASE',
+]
+_missing = [v for v in _REQUIRED if not os.environ.get(v)]
+if _missing:
+    print("ERROR: The following required environment variables are not set:\n")
+    for v in _missing:
+        print(f"  export {v}=\"...\"")
+    print("\nCopy scripts/.env.example to scripts/.env and fill in values.")
+    print("Never commit .env or hardcode credentials in source files.")
+    sys.exit(1)
+
+os.environ.setdefault('MSSQL_PORT', '1433')
 os.environ.setdefault('VALIDATION_OUTPUT_DIR', os.path.join(os.getcwd(), 'validation_output'))
-os.environ['VALIDATION_SKIP_WRITES'] = 'false'
+os.environ.setdefault('VALIDATION_SKIP_WRITES', 'false')
 
 SCRIPTS_DIR = os.path.expanduser('~/.snowflake/cortex/skills/mssql_spg_migration_validation_testing/scripts')
 sys.path.insert(0, SCRIPTS_DIR)
