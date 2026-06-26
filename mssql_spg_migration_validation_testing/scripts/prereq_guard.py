@@ -20,6 +20,19 @@ import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import MSSQL_CONF, SPG_CONF
 
+
+class PrereqRestoreError(RuntimeError):
+    """
+    Raised when prereq_guard ran correctly but could not restore the required
+    database state (e.g. column not found, insert failed after retry).
+
+    Callers should classify the procedure as FAIL_MISSING_PREREQ — this is an
+    environment/data issue, NOT a bug in the test harness.
+
+    Contrast with a plain Exception from the guard: that signals a bug in the
+    guard code itself (bad YAML, unexpected DB error) and should be FAIL_HARNESS.
+    """
+
 # ── Load rules from YAML ───────────────────────────────────────────────────────
 _RULES = {}
 _RULES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -200,7 +213,7 @@ def _mssql_promote_status_row(conn, step: dict):
     pk      = _resolve(cfg.get('pk_col', []), col_map)
 
     if not flag or not pk:
-        raise RuntimeError(
+        raise PrereqRestoreError(
             f'promote_status_row: cannot resolve active_flag_col or pk_col '
             f'in [{schema}].[{table}]. Available: {list(col_map.keys())}')
 
@@ -244,7 +257,7 @@ def _mssql_ensure_log_row(conn, step: dict):
     end_col     = _resolve(cfg.get('open_end_col', []), col_map)
 
     if not fk:
-        raise RuntimeError(
+        raise PrereqRestoreError(
             f'ensure_log_row: cannot resolve fk_to_status in [{schema}].[{table}]. '
             f'Available: {list(col_map.keys())}')
 
@@ -331,7 +344,7 @@ def _spg_promote_status_row(conn, step: dict):
     pk      = _resolve(cfg.get('pk_col', []), col_map)
 
     if not flag or not pk:
-        raise RuntimeError(
+        raise PrereqRestoreError(
             f'promote_status_row: cannot resolve active_flag_col or pk_col '
             f'in {schema}.{table}. Available: {list(col_map.keys())}')
 
@@ -371,7 +384,7 @@ def _spg_ensure_log_row(conn, step: dict):
     end_col   = _resolve(cfg.get('open_end_col', []), col_map)
 
     if not fk:
-        raise RuntimeError(
+        raise PrereqRestoreError(
             f'ensure_log_row: cannot resolve fk_to_status in {schema}.{table}. '
             f'Available: {list(col_map.keys())}')
 
@@ -462,7 +475,7 @@ def _execute_rule(conn, rule: dict, handlers: dict, key: str):
         step_type = step.get('type')
         handler   = handlers.get(step_type)
         if not handler:
-            raise RuntimeError(
+            raise PrereqRestoreError(
                 f'prereq_guard: unknown step type "{step_type}" in rule "{key}"')
         handler(conn, step)
 
@@ -473,7 +486,8 @@ def restore_mssql_prereqs(prereqs: list) -> None:
     """
     Restore all required MSSQL prerequisite states.
     On first failure, clears the column cache and retries once with fresh introspection.
-    Raises RuntimeError if retry also fails — callers should classify as FAIL_MISSING_PREREQ.
+    Raises PrereqRestoreError if retry also fails — callers should classify as FAIL_MISSING_PREREQ.
+    Any other exception from this function is an unexpected harness error — classify as FAIL_HARNESS.
     """
     if not prereqs:
         return
@@ -492,7 +506,7 @@ def restore_mssql_prereqs(prereqs: list) -> None:
                 try:
                     _execute_rule(conn, rule, _MSSQL_STEP_HANDLERS, key)
                 except Exception as retry_err:
-                    raise RuntimeError(
+                    raise PrereqRestoreError(
                         f'prereq_guard MSSQL [{key}]: {retry_err}')
     finally:
         try:
@@ -505,7 +519,8 @@ def restore_spg_prereqs(prereqs: list) -> None:
     """
     Restore all required SPG prerequisite states.
     On first failure, clears the column cache and retries once with fresh introspection.
-    Raises RuntimeError if retry also fails — callers should classify as FAIL_MISSING_PREREQ.
+    Raises PrereqRestoreError if retry also fails — callers should classify as FAIL_MISSING_PREREQ.
+    Any other exception from this function is an unexpected harness error — classify as FAIL_HARNESS.
     """
     if not prereqs:
         return
@@ -524,7 +539,7 @@ def restore_spg_prereqs(prereqs: list) -> None:
                 try:
                     _execute_rule(conn, rule, _SPG_STEP_HANDLERS, key)
                 except Exception as retry_err:
-                    raise RuntimeError(
+                    raise PrereqRestoreError(
                         f'prereq_guard SPG [{key}]: {retry_err}')
     finally:
         try:

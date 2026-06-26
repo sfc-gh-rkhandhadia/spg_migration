@@ -333,6 +333,17 @@ def compare(ms_rec, spg_rec):
         result['verdict'] = 'SKIPPED'
         return result
 
+    # Prereq guard crashed (infrastructure bug) — propagate as-is, do not classify
+    # as FAIL_MISSING_PREREQ which would incorrectly exclude it from the pass rate.
+    if ms_rec['status'] == 'FAIL_HARNESS' or spg_rec['status'] == 'FAIL_HARNESS':
+        result['verdict'] = 'FAIL_HARNESS'
+        side = 'MSSQL' if ms_rec['status'] == 'FAIL_HARNESS' else 'SPG'
+        result['issues'].append(
+            'prereq_guard harness error on %s side: %s' % (
+                side,
+                str((ms_rec if ms_rec['status'] == 'FAIL_HARNESS' else spg_rec).get('error', ''))[:200]))
+        return result
+
     # Execution status
     ms_ok  = ms_rec['status'] == 'SUCCESS'
     spg_ok = spg_rec['status'] == 'SUCCESS'
@@ -558,6 +569,7 @@ def print_report(comparisons, out):
     out.write("  MSSQL_ERROR : %-5d  MSSQL execution failed\n"              % totals.get('MSSQL_ERROR', 0))
     out.write("  BOTH_FAILED : %-5d  both sides failed\n"                   % totals.get('BOTH_FAILED', 0))
     out.write("  FAIL_PREREQ : %-5d  prereq seed profile not applied before execution (excluded from pass rate)\n" % totals.get('FAIL_MISSING_PREREQ', 0))
+    out.write("  FAIL_HARNESS: %-5d  prereq guard infrastructure error (check harness setup)\n" % totals.get('FAIL_HARNESS', 0))
     out.write("  PASS_DML   : %-5d  DML/ETL proc — executed OK on both sides; write-side procedure validated\n" % totals.get('PASS_DML_PROC', 0))
     out.write("  PASS_WRITE  : %-5d  write proc — executed OK on both sides (rollback-wrapped)\n" % totals.get('PASS_WRITE_PROC', 0))
     out.write("  XFAIL_WRITE : %-5d  write proc — both sides raised consistent constraint error (expected with NULL params)\n" % totals.get('WRITE_EXPECTED_FAIL', 0))
@@ -688,7 +700,7 @@ def main():
             'target_row_count':  c.get('spg_total_rows'),
             'test_verdict':  c['verdict'],
             'issues':        c.get('issues', []),
-            'error_message': '; '.join(c.get('issues', [])) if c['verdict'] in ('ERROR','SPG_ERROR','MSSQL_ERROR','BOTH_FAILED','FAIL_MISSING_PREREQ') else None,
+            'error_message': '; '.join(c.get('issues', [])) if c['verdict'] in ('ERROR','SPG_ERROR','MSSQL_ERROR','BOTH_FAILED','FAIL_MISSING_PREREQ','FAIL_HARNESS') else None,
             'diff_sample':   c.get('diffs') or None,
             'mssql_status':  c.get('ms_status', ''),
             'spg_status':    c.get('spg_status', ''),

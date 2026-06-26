@@ -6,6 +6,29 @@ Validates that stored procedures, functions, views, and triggers produce identic
 
 ---
 
+## Running tests
+
+The unit test suite covers verdict logic, reclassification rules, prereq guard detection, and schema filters. All tests run without live DB connections.
+
+```bash
+cd mssql_spg_migration_validation_testing
+pip install pytest pyyaml
+pytest
+```
+
+Expected output: all tests pass in under 1 second.
+
+### What is tested
+
+| Test file | What it covers |
+|-----------|----------------|
+| `tests/test_config_filters.py` | `is_mssql_system_schema` and `is_spg_system_schema` — blocks system schemas, allows customer schemas |
+| `tests/test_prereq_guard_logic.py` | `detect_mssql/spg_prereqs`, `_resolve`, `_mssql_default`, `_spg_default`, `_normalise_fixed`, `PrereqRestoreError` hierarchy |
+| `tests/test_compare_verdict.py` | Every verdict branch in `compare()`: PASS, FAIL, BOTH_FAILED, SPG_ERROR, MSSQL_ERROR, FAIL_HARNESS, SPG_NO_RESULTSET, PASS_DML_PROC, SKIPPED |
+| `tests/test_reclassification.py` | YAML integrity, reclassification rules fire/don't-fire on matching/non-matching error text |
+
+---
+
 ## What it does
 
 - **Behavioral validation** — executes stored procedures, functions, views, and triggers on both MSSQL and SPG and compares row counts and output

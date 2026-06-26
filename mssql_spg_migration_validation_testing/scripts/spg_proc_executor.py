@@ -368,12 +368,13 @@ def main():
             # If restore fails after retry, classify as FAIL_MISSING_PREREQ
             # and skip execution (per skill spec — not a converter defect).
             try:
-                from prereq_guard import detect_spg_prereqs, restore_spg_prereqs
+                from prereq_guard import detect_spg_prereqs, restore_spg_prereqs, PrereqRestoreError
                 prereqs = detect_spg_prereqs(info.get('proc_def', ''))
                 if prereqs:
                     restore_spg_prereqs(prereqs)
                     print("  [GUARD] %-50s %s" % (full_key, ','.join(prereqs)))
-            except Exception as _guard_err:
+            except PrereqRestoreError as _guard_err:
+                # Guard ran but couldn't restore required state — environment issue
                 print("  FAIL_PREREQ prereq_guard SPG [%s]: %s" % (full_key, str(_guard_err)[:150]))
                 records.append({
                     'schema': schema, 'procedure_name': name,
@@ -382,6 +383,20 @@ def main():
                     'row_count': 0, 'status': 'FAIL_MISSING_PREREQ',
                     'error': f'prereq_guard failed: {str(_guard_err)[:300]}',
                     'strategy': 'prereq_guard',
+                    'prereq_guard_error_type': 'missing_prereq',
+                })
+                continue  # do not execute the procedure
+            except Exception as _guard_err:
+                # Guard itself crashed — bug in test infrastructure
+                print("  FAIL_HARNESS prereq_guard SPG [%s]: %s" % (full_key, str(_guard_err)[:150]))
+                records.append({
+                    'schema': schema, 'procedure_name': name,
+                    'full_name': full_key, 'object_kind': info.get('kind', 'PROCEDURE'),
+                    'params_schema': [], 'params_used': [], 'result_sets': [],
+                    'row_count': 0, 'status': 'FAIL_HARNESS',
+                    'error': f'prereq_guard harness error: {str(_guard_err)[:300]}',
+                    'strategy': 'prereq_guard',
+                    'prereq_guard_error_type': 'harness_error',
                 })
                 continue  # do not execute the procedure
 

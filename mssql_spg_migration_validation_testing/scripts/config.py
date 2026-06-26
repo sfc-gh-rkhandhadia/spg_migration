@@ -142,7 +142,6 @@ _SYSTEM_PREFIXES = (
     'information_schema',  # SQL standard information schema
     'snowflake_',       # Snowflake internal schemas
     'snowflake_cdc',    # Snowflake CDC replication schema
-    'lake_',            # Snowflake data lake internal schemas
     '__pg_',            # Postgres internal double-underscore schemas
     '__lake__',         # Snowflake lake internal double-underscore schemas
     'extension_',       # Postgres extension namespaces
