@@ -156,5 +156,5 @@ These scripts print to stdout only — results are **not** written to the audit 
 | Script | Purpose | Use instead |
 |--------|---------|-------------|
 | `run_validation.py` | All-object validator (tables, views, procs, functions, triggers, types) against a single environment using `.env` credentials | `run.py --all` for a full audited run |
-| `full_validation.py` | **Legacy.** Structural check for the `api` schema only (hardcoded). Checks param counts and view row counts; does not execute procedures. | `run.py --all` or `validate_funcs_procs_separate.py` |
+| `full_validation.py` | **Legacy.** Structural check across all schemas (auto-discovered from system catalog). Checks param counts/names and view row counts; does not execute procedures. | `run.py --all` or `validate_funcs_procs_separate.py` |
 | `full_schema_audit.py` | Structural existence check across all schemas — procedures, functions, and views. Wide-angle survey with no execution. | `validate_funcs_procs_separate.py` (persists results) |
