@@ -1,8 +1,31 @@
+"""
+Cross-schema DDL audit (structural only)
+=========================================
+Discovers every user schema on both MSSQL and SPG and checks existence +
+parameter/column parity for procedures, functions, and views across all schemas.
+Results print to stdout; nothing is written to the validation audit tables.
+
+Use this script for:
+  - A wide-angle structural survey when you want to see every schema at once
+  - Early-stage migration assessment before the full behavioral pipeline is run
+  - Checking whether a schema was converted at all (MISSING vs SPG_ONLY)
+
+Do NOT use this script for:
+  - Behavioral execution testing → use run.py --procs
+  - Storing results for report generation → use run.py (writes to validation.validation_result)
+  - Trigger or table validation → use validate_triggers.py / run.py
+
+Limitations:
+  - Structural parity only: checks existence and parameter counts, does NOT execute objects
+  - Results are not persisted to validation.validation_result
+  - Schema list is computed eagerly at import time (two DB connections on startup)
+
+Alternative for persistent results: python3 run.py --all
+Alternative for schema-only parity:  python3 validate_funcs_procs_separate.py
+"""
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-"""
-Full cross-schema audit: ALL schemas
-SQL Server vs Postgres — procedures, functions, views
-"""
+print("[NOTICE] full_schema_audit.py is a structural spot-check tool. "
+      "Results are not saved to audit tables. Use run.py for the full pipeline.")
 import pymssql, psycopg2, psycopg2.extras, concurrent.futures, sys
 from config import MSSQL_CONF, SPG_CONF, is_mssql_system_schema, is_spg_system_schema, check_required
 

@@ -123,15 +123,38 @@ What is the reason and how do I fix it?
 
 ## Key scripts
 
+### Main pipeline
+
 | Script | Purpose |
 |--------|---------|
-| `run.py` | Main validation runner |
-| `compare_proc_outputs.py` | Compares MSSQL vs SPG outputs, applies reclassification rules |
-| `mssql_proc_executor.py` | Executes objects against SQL Server |
-| `spg_proc_executor.py` | Executes objects against Snowflake Postgres |
-| `generate_validation_markdown.py` | Generates two-part markdown report |
-| `generate_migration_report.py` | Generates 23-slide PowerPoint report |
-| `alternate_flow_rules.yaml` | Rule-driven BOTH_FAILED → FAIL_MISSING_PREREQ reclassification |
-| `load_mssql_to_spg.py` | FK-safe data loader (no DDL) |
-| `run_validation.sh` | Runs full validation suite |
-| `run_compare_and_reports.sh` | Regenerates comparison + markdown + PPTX from existing results |
+| `run.py` | Main validation runner — triggers all phases in order |
+| `mssql_proc_executor.py` | Executes every procedure/function against SQL Server; writes `mssql_output.jsonl` |
+| `spg_proc_executor.py` | Executes every procedure/function against Snowflake Postgres; writes `spg_output.jsonl` |
+| `compare_proc_outputs.py` | Diffs MSSQL vs SPG outputs, applies reclassification rules, writes to audit tables |
+| `validate_batch.py` | View validation: row count, column set, and data hash parity |
+| `validate_triggers.py` | Trigger existence, table target, and event type parity |
+| `validate_funcs_procs_separate.py` | Structural parity check (existence + param count/names) across all schemas; writes to audit tables |
+| `prereq_guard.py` | YAML-driven prerequisite state restorer — run before proc execution |
+| `param_discovery.py` | Samples real parameter values from live data for use by both executors |
+| `load_mssql_to_spg.py` | FK-safe data loader from MSSQL into SPG (no DDL changes) |
+| `generate_validation_markdown.py` | Generates two-part Markdown report from audit table results |
+| `generate_migration_report.py` | Generates 27-slide Snowflake-branded PowerPoint report |
+| `alternate_flow_rules.yaml` | Rule-driven `BOTH_FAILED` → `FAIL_MISSING_PREREQ` reclassification config |
+| `setup_validation_tables.sql` | Creates `validation.validation_run`, `validation.validation_result`, and summary views in SPG |
+
+### Shell wrappers
+
+| Script | Purpose |
+|--------|---------|
+| `run_validation.sh` | Loads `.env` and runs `python3 run.py --all` |
+| `run_compare_and_reports.sh` | Regenerates comparison + Markdown + PPTX from existing JSONL results (no re-execution) |
+
+### Ad-hoc and legacy scripts
+
+These scripts print to stdout only — results are **not** written to the audit tables and cannot be used for report generation.
+
+| Script | Purpose | Use instead |
+|--------|---------|-------------|
+| `run_validation.py` | All-object validator (tables, views, procs, functions, triggers, types) against a single environment using `.env` credentials | `run.py --all` for a full audited run |
+| `full_validation.py` | **Legacy.** Structural check for the `api` schema only (hardcoded). Checks param counts and view row counts; does not execute procedures. | `run.py --all` or `validate_funcs_procs_separate.py` |
+| `full_schema_audit.py` | Structural existence check across all schemas — procedures, functions, and views. Wide-angle survey with no execution. | `validate_funcs_procs_separate.py` (persists results) |

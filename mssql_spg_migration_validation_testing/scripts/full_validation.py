@@ -1,9 +1,30 @@
+"""
+LEGACY — api-schema spot-check validator
+========================================
+Quick structural check for procedures, functions, and views in the **api schema only**.
+Results print to stdout; nothing is written to the validation audit tables.
+
+Use this script for:
+  - Fast ad-hoc parity checks against the api schema during development
+  - Debugging a single schema without running the full pipeline
+
+Do NOT use this script for:
+  - Production validation runs  → use run.py (or run_validation.sh)
+  - Behavioral execution testing → use run.py --procs
+  - Generating reports           → use generate_validation_markdown.py / generate_migration_report.py
+  - Any run whose results need to be stored or compared over time
+
+Limitations:
+  - Hardcoded to the 'api' schema; other schemas are not validated
+  - Checks parameter count/names and view row counts only — does not execute procedures
+  - Results are not persisted to validation.validation_result
+  - Uses a WARN verdict (not part of the standard taxonomy) for SPG-only columns
+
+Alternative: python3 run.py --all
+"""
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-"""
-Complete validation: ALL procedures, functions, and views
-Dynamically discovers all schemas and objects — no hardcoded names.
-Use run.py for the full pipeline; this script provides the legacy combined runner.
-"""
+print("[NOTICE] full_validation.py is a legacy spot-check tool (api schema only). "
+      "Results are not saved to audit tables. Use run.py for the full pipeline.")
 import pymssql, psycopg2, psycopg2.extras, concurrent.futures, sys, time
 from config import MSSQL_CONF, SPG_CONF, is_mssql_system_schema, is_spg_system_schema, check_required
 
