@@ -1,11 +1,16 @@
 """
-LEGACY — api-schema spot-check validator
-========================================
-Quick structural check for procedures, functions, and views in the **api schema only**.
+Single-schema spot-check validator
+===================================
+Quick structural check for procedures, functions, and views in a single schema.
 Results print to stdout; nothing is written to the validation audit tables.
 
+Usage:
+  python3 full_validation.py [schema]          # defaults to 'api'
+  python3 full_validation.py dbo
+  python3 full_validation.py reporting
+
 Use this script for:
-  - Fast ad-hoc parity checks against the api schema during development
+  - Fast ad-hoc parity checks against one schema during development
   - Debugging a single schema without running the full pipeline
 
 Do NOT use this script for:
@@ -15,7 +20,7 @@ Do NOT use this script for:
   - Any run whose results need to be stored or compared over time
 
 Limitations:
-  - Hardcoded to the 'api' schema; other schemas are not validated
+  - One schema per invocation; for all schemas use full_schema_audit.py
   - Checks parameter count/names and view row counts only — does not execute procedures
   - Results are not persisted to validation.validation_result
   - Uses a WARN verdict (not part of the standard taxonomy) for SPG-only columns
@@ -23,7 +28,9 @@ Limitations:
 Alternative: python3 run.py --all
 """
 import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-print("[NOTICE] full_validation.py is a legacy spot-check tool (api schema only). "
+
+SCHEMA = sys.argv[1] if len(sys.argv) > 1 else "api"
+print(f"[NOTICE] full_validation.py is a spot-check tool (schema: {SCHEMA!r}). "
       "Results are not saved to audit tables. Use run.py for the full pipeline.")
 import pymssql, psycopg2, psycopg2.extras, concurrent.futures, sys, time
 from config import MSSQL_CONF, SPG_CONF, is_mssql_system_schema, is_spg_system_schema, check_required
@@ -46,9 +53,9 @@ def discover_mssql():
         FROM sys.procedures p
         JOIN sys.schemas s ON p.schema_id = s.schema_id
         JOIN sys.sql_modules sm ON p.object_id = sm.object_id
-        WHERE s.name = 'api'
+        WHERE s.name = %s
         ORDER BY p.name
-    """)
+    """, (SCHEMA,))
     procs = cur.fetchall()
 
     # Views
@@ -58,9 +65,9 @@ def discover_mssql():
         FROM sys.views v
         JOIN sys.schemas s ON v.schema_id = s.schema_id
         JOIN sys.sql_modules sm ON v.object_id = sm.object_id
-        WHERE s.name = 'api'
+        WHERE s.name = %s
         ORDER BY v.name
-    """)
+    """, (SCHEMA,))
     views = cur.fetchall()
     conn.close()
 
@@ -82,9 +89,9 @@ def discover_spg():
                p.pronargs AS param_count
         FROM pg_proc p
         JOIN pg_namespace n ON p.pronamespace = n.oid
-        WHERE n.nspname = 'api'
+        WHERE n.nspname = %s
         ORDER BY p.proname
-    """)
+    """, (SCHEMA,))
     procs = cur.fetchall()
 
     # Views
@@ -92,9 +99,9 @@ def discover_spg():
         SELECT c.relname AS obj_name, 'VIEW' AS obj_type
         FROM pg_class c
         JOIN pg_namespace n ON c.relnamespace = n.oid
-        WHERE c.relkind = 'v' AND n.nspname = 'api'
+        WHERE c.relkind = 'v' AND n.nspname = %s
         ORDER BY c.relname
-    """)
+    """, (SCHEMA,))
     views = cur.fetchall()
     conn.close()
 
@@ -110,9 +117,9 @@ def validate_view(ms_name, spg_name):
     try:
         ms = ms_conn()
         mc = ms.cursor()
-        mc.execute("SELECT TOP 0 * FROM api.%s" % ms_name)
+        mc.execute("SELECT TOP 0 * FROM %s.%s" % (SCHEMA, ms_name))
         ms_cols  = [d[0].lower() for d in mc.description]
-        mc.execute("SELECT COUNT(*) FROM api.%s" % ms_name)
+        mc.execute("SELECT COUNT(*) FROM %s.%s" % (SCHEMA, ms_name))
         ms_count = mc.fetchone()[0]
         ms.close()
     except Exception as e:
@@ -122,9 +129,9 @@ def validate_view(ms_name, spg_name):
     try:
         sp = spg_conn()
         sc = sp.cursor()
-        sc.execute('SELECT * FROM api."%s" LIMIT 0' % spg_name)
+        sc.execute('SELECT * FROM %s."%s" LIMIT 0' % (SCHEMA, spg_name))
         spg_cols  = [d[0].lower() for d in sc.description]
-        sc.execute('SELECT COUNT(*) FROM api."%s"' % spg_name)
+        sc.execute('SELECT COUNT(*) FROM %s."%s"' % (SCHEMA, spg_name))
         spg_count = sc.fetchone()[0]
         sp.close()
     except Exception as e:
@@ -157,9 +164,9 @@ def get_ms_params(name):
             JOIN sys.schemas s ON pr.schema_id = s.schema_id
             JOIN sys.parameters p ON pr.object_id = p.object_id
             JOIN sys.types t ON p.user_type_id = t.user_type_id
-            WHERE s.name = 'api' AND LOWER(pr.name) = %s
+            WHERE s.name = %s AND LOWER(pr.name) = %s
             ORDER BY p.parameter_id
-        """, (name,))
+        """, (SCHEMA, name,))
         rows = cur.fetchall(); conn.close()
         return [{'name': r['pname'].lstrip('@').lower(), 'type': r['tname']} for r in rows]
     except Exception as e:
@@ -173,9 +180,9 @@ def get_spg_params(name):
             SELECT pa.ordinal_position, pa.parameter_name, pa.data_type, pa.parameter_mode
             FROM information_schema.routines r
             JOIN information_schema.parameters pa ON r.specific_name = pa.specific_name
-            WHERE r.routine_schema = 'api' AND LOWER(r.routine_name) = %s
+            WHERE r.routine_schema = %s AND LOWER(r.routine_name) = %s
             ORDER BY pa.ordinal_position
-        """, (name,))
+        """, (SCHEMA, name,))
         rows = cur.fetchall(); conn.close()
         return [{'name': (r['parameter_name'] or '').lstrip('_').lower(),
                  'type': r['data_type'] or ''}
@@ -231,14 +238,12 @@ matched      = ms_names & spg_names
 only_in_ms   = ms_names - spg_names  # missing in SPG
 only_in_spg  = spg_names - ms_names  # new in SPG (not in MSSQL)
 
-print("MSSQL api schema : %d objects (%d procs, %d views)" % (
-    len(ms_objects),
-    sum(1 for v in ms_objects.values() if v['type']=='PROCEDURE'),
-    sum(1 for v in ms_objects.values() if v['type']=='VIEW')))
-print("SPG   api schema : %d objects (%d procs/funcs, %d views)" % (
-    len(spg_objects),
-    sum(1 for v in spg_objects.values() if v['type'] in ('PROCEDURE','FUNCTION')),
-    sum(1 for v in spg_objects.values() if v['type']=='VIEW')))
+print(f"MSSQL {SCHEMA} schema : {len(ms_objects)} objects "
+      f"({sum(1 for v in ms_objects.values() if v['type']=='PROCEDURE')} procs, "
+      f"{sum(1 for v in ms_objects.values() if v['type']=='VIEW')} views)")
+print(f"SPG   {SCHEMA} schema : {len(spg_objects)} objects "
+      f"({sum(1 for v in spg_objects.values() if v['type'] in ('PROCEDURE','FUNCTION'))} procs/funcs, "
+      f"{sum(1 for v in spg_objects.values() if v['type']=='VIEW')} views)")
 print("Matched          : %d" % len(matched))
 print("Missing in SPG   : %d" % len(only_in_ms))
 print("New in SPG only  : %d" % len(only_in_spg))
@@ -281,7 +286,7 @@ all_results.sort(key=lambda r: (order.get(r['verdict'],9), r['type'], r['name'])
 
 SEP = "=" * 110
 print(SEP)
-print("COMPLETE VALIDATION REPORT — api schema")
+print("COMPLETE VALIDATION REPORT — %s schema" % SCHEMA)
 print(SEP)
 
 # Views section
@@ -297,7 +302,7 @@ for r in view_results:
     ms_r  = r.get('ms_rows',  '?')
     spg_r = r.get('spg_rows', '?')
     print("%-55s %-6s %10s %10s  %-8s" % (
-        'api.'+r['name'], r['type'],
+        SCHEMA+'.'+r['name'], r['type'],
         str(ms_r) if ms_r is not None else 'ERR',
         str(spg_r) if spg_r is not None else 'ERR',
         r['verdict']))
@@ -312,7 +317,7 @@ print("%-60s %-9s %6s %6s  %-8s  ISSUES" % ("PROCEDURE","TYPE","MS_P","SPG_P","V
 print("─"*110)
 for r in proc_results:
     print("%-60s %-9s %6s %6s  %-8s" % (
-        'api.'+r['name'], r['type'],
+        SCHEMA+'.'+r['name'], r['type'],
         str(r.get('ms_p','?')), str(r.get('spg_p','?')), r['verdict']))
     for iss in r['issues']:
         print("  └─ %s" % iss)
@@ -323,7 +328,7 @@ print("MISSING IN SPG  (%d objects in MSSQL with no match in SPG)" % len(only_in
 print("─"*110)
 for n in sorted(only_in_ms):
     info = ms_objects[n]
-    print("  MISSING  %-55s  %s" % ('api.'+info['name'], info['type']))
+    print("  MISSING  %-55s  %s" % (SCHEMA+'.'+info['name'], info['type']))
 
 # New in SPG only
 print("\n%s" % ("─"*110))
@@ -331,7 +336,7 @@ print("NEW IN SPG ONLY  (%d objects in SPG not in MSSQL)" % len(only_in_spg))
 print("─"*110)
 for n in sorted(only_in_spg):
     info = spg_objects[n]
-    print("  SPG_ONLY  %-55s  %s" % ('api.'+info['name'], info['type']))
+    print("  SPG_ONLY  %-55s  %s" % (SCHEMA+'.'+info['name'], info['type']))
 
 # Summary
 v_pass  = sum(1 for r in view_results if r['verdict']=='PASS')
