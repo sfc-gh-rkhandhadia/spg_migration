@@ -1633,13 +1633,19 @@ def build_deck(client_name, author, run_date,
     if output_path is None:
         output_path = os.environ.get('REPORT_OUTPUT')
     if output_path is None:
-        gdrive = os.path.expanduser("~/Google Drive/My Drive")
-        safe_client = client_name.replace(' ', '_').replace('/', '-')
-        fname = f"Migration_Validation_{run_date.replace('-','')}.pptx"
-        if os.path.isdir(gdrive):
-            output_path = os.path.join(gdrive, fname)
+        val_out = os.environ.get('VALIDATION_OUTPUT_DIR')
+        if val_out:
+            safe_client = client_name.replace(' ', '_').replace('/', '-')
+            fname = f"{safe_client}_Migration_Validation_Report.pptx"
+            output_path = os.path.join(val_out, fname)
         else:
-            output_path = os.path.expanduser(f"~/Downloads/{fname}")
+            gdrive = os.path.expanduser("~/Google Drive/My Drive")
+            safe_client = client_name.replace(' ', '_').replace('/', '-')
+            fname = f"Migration_Validation_{run_date.replace('-','')}.pptx"
+            if os.path.isdir(gdrive):
+                output_path = os.path.join(gdrive, fname)
+            else:
+                output_path = os.path.expanduser(f"~/Downloads/{fname}")
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     prs.save(output_path)

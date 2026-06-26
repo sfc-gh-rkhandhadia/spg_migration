@@ -36,7 +36,7 @@ from collections import defaultdict
 check_required()
 
 parser = argparse.ArgumentParser(description='Generate client-ready Markdown validation report')
-parser.add_argument('--out-dir',   default=os.path.expanduser('~/Downloads'))
+parser.add_argument('--out-dir',   default=os.environ.get('VALIDATION_OUTPUT_DIR', os.path.expanduser('~/Downloads')))
 parser.add_argument('--out-file',  default='')
 parser.add_argument('--client',    default='')
 parser.add_argument('--author',    default='Rekha Khandhadia')
@@ -51,7 +51,7 @@ DATE_LONG = datetime.now().strftime('%B %d, %Y')
 
 # ── Verdict helpers ───────────────────────────────────────────────────────────
 PASS_V   = {'PASS', 'PASS_DML_PROC'}
-FAIL_V   = {'FAIL', 'SPG_ERROR', 'SPG_NO_RESULTSET', 'MSSQL_ERROR',
+FAIL_V   = {'FAIL', 'FAIL_DATA', 'FAIL_CONVERSION', 'SPG_ERROR', 'SPG_NO_RESULTSET', 'MSSQL_ERROR',
             'BOTH_FAILED', 'ERROR', 'WARN', 'MSSQL_ONLY'}
 SKIP_V   = {'SKIPPED'}
 EXTRA_V  = {'SPG_ONLY'}
@@ -247,12 +247,14 @@ VERDICT_DESC = {
     'SPG_ERROR':        'SPG execution failed — migration defect requiring fix',
     'SPG_NO_RESULTSET': 'SPG proc cannot return result set — needs FUNCTION conversion',
     'FAIL':             'Execution succeeded but results differ (data or column mismatch)',
+    'FAIL_DATA':        'Row count mismatch — object has rows in MSSQL but 0 in SPG (data load gap)',
+    'FAIL_CONVERSION':  'Type conversion error during data copy',
     'MSSQL_ERROR':      'MSSQL execution failed',
     'MSSQL_ONLY':       'Object in MSSQL but not migrated to SPG',
     'SPG_ONLY':         'Object in SPG but not in MSSQL source',
     'WARN':             'Warning — minor structural difference',
     'ERROR':            'Execution error on one or both sides',
-    'PASS_DML_PROC':       'Both returned 0 rows (correct for void procedures)',
+    'PASS_DML_PROC':    'Both returned 0 rows (correct for void procedures)',
 }
 
 # ── Remediation priorities — named ───────────────────────────────────────────
@@ -263,7 +265,7 @@ def has_verdict(v): return verdict_counts.get(v, 0) > 0
 spg_err_rows = [r for r in all_results if r.get('test_verdict') == 'SPG_ERROR']
 both_failed   = [r for r in all_results if r.get('test_verdict') == 'BOTH_FAILED']
 no_rs_rows    = [r for r in all_results if r.get('test_verdict') == 'SPG_NO_RESULTSET']
-fail_rows     = [r for r in all_results if r.get('test_verdict') == 'FAIL']
+fail_rows     = [r for r in all_results if r.get('test_verdict') in {'FAIL', 'FAIL_DATA', 'FAIL_CONVERSION'}]
 
 # Detect specific error patterns
 def has_pattern(rows, pattern):
@@ -321,6 +323,15 @@ if len(job_prereq_rows) > 0:
         'Populate `stg.MicrosLoadStatus` with a test job record before validating stg export procs. '
         'These procs require an active job to exist — both MSSQL and SPG fail identically (parity confirmed).',
         len(job_prereq_rows)))
+    n += 1
+
+fail_data_rows = [r for r in all_results if r.get('test_verdict') == 'FAIL_DATA']
+if fail_data_rows:
+    remediation.append((n, 'Tables/views with 0 rows in SPG (data load gap)', 'FAIL_DATA',
+        f'{len(fail_data_rows)} object(s) have rows in MSSQL but 0 rows in SPG. '
+        'Root causes: unique constraint collision during load, missing cascade dependency, '
+        'or FK-ordered insert failure. Retry load for affected tables after resolving constraints.',
+        len(fail_data_rows)))
     n += 1
 
 if fail_rows:
@@ -470,6 +481,10 @@ for sc in schemas_with_fails:
             iss = clean('; '.join(str(i) for i in issues[:2]), 120)
         elif err:
             iss = clean(err, 120)
+        elif v == 'FAIL_DATA':
+            src = r.get('source_row_count', '?')
+            tgt = r.get('target_row_count', '?')
+            iss = f'ROW_COUNT: MSSQL={src} SPG={tgt}'
         else:
             iss = ''
         # Escape pipe chars in issue

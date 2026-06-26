@@ -42,8 +42,9 @@ check_required()
 
 # ── CLI args ──────────────────────────────────────────────────────────────────
 parser = argparse.ArgumentParser(description='Generate Markdown validation report')
-parser.add_argument('--out-dir', default=os.path.expanduser('~/Downloads'),
-                    help='Output directory (default: ~/Downloads)')
+parser.add_argument('--out-dir',
+                    default=os.environ.get('VALIDATION_OUTPUT_DIR', os.path.expanduser('~/Downloads')),
+                    help='Output directory (default: $VALIDATION_OUTPUT_DIR or ~/Downloads)')
 parser.add_argument('--client',  default='',
                     help='Client / project name for report title')
 parser.add_argument('--run-trig', type=int, default=0,
