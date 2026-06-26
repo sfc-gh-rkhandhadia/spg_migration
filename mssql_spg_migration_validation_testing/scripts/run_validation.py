@@ -13,6 +13,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv optional; rely on environment already set
+
 # Regex for identifiers PostgreSQL normalises to lowercase.
 # Covers letters, digits, underscores, and dollar signs (valid unquoted PG
 # identifier characters per SQL:2003 and the PostgreSQL docs).  Names that
@@ -37,23 +43,21 @@ def pg_name(name: str) -> str:
         return name.lower()
     return name  # preserve case for hyphenated / special-character names
 
-# Set environment variables for the validation scripts
-os.environ["MSSQL_HOST"] = "localhost"
-os.environ["MSSQL_PORT"] = "1435"
-os.environ["MSSQL_USER"] = "sa"
-os.environ["MSSQL_PASSWORD"] = "REDACTED_MSSQL_PASSWORD"
-os.environ["MSSQL_DATABASE"] = "AcuityDB"
+# Required env vars — set these in .env (see .env.example) or export them
+_REQUIRED = [
+    "MSSQL_HOST", "MSSQL_PORT", "MSSQL_USER", "MSSQL_PASSWORD", "MSSQL_DATABASE",
+    "SPG_HOST", "SPG_USER", "SPG_PASSWORD", "SPG_DATABASE",
+    "VALIDATION_OUTPUT_DIR",
+]
+for _var in _REQUIRED:
+    if not os.environ.get(_var):
+        sys.exit(f"ERROR: required environment variable {_var!r} is not set. Copy .env.example to .env and fill in values.")
 
-os.environ["SPG_HOST"] = "your-spg-host.snowflakecomputing.app"
-os.environ["SPG_USER"] = "snowflake_admin"
-os.environ["SPG_PASSWORD"] = "REDACTED_SPG_PASSWORD"
-os.environ["SPG_DATABASE"] = "postgres"
-os.environ["VALIDATION_OUTPUT_DIR"] = "/Users/rkhandhadia/Documents/Acuity/validation_results"
-os.environ["VALIDATION_EXCLUDE_SCHEMAS"] = "public"
-os.environ["VALIDATION_SKIP_WRITES"] = "true"
-
-SCRIPTS_DIR = Path("/Users/rkhandhadia/.snowflake/cortex/skills/mssql_spg_migration_validation_testing/scripts")
-OUT_DIR = Path("/Users/rkhandhadia/Documents/Acuity/validation_results")
+SCRIPTS_DIR = Path(os.environ.get(
+    "SCRIPTS_DIR",
+    Path(__file__).parent
+))
+OUT_DIR = Path(os.environ["VALIDATION_OUTPUT_DIR"])
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -68,17 +72,22 @@ import psycopg2.extras
 
 def mssql_connect():
     return pymssql.connect(
-        server="localhost", port=1435, user="sa",
-        password="REDACTED_MSSQL_PASSWORD", database="AcuityDB",
+        server=os.environ["MSSQL_HOST"],
+        port=int(os.environ["MSSQL_PORT"]),
+        user=os.environ["MSSQL_USER"],
+        password=os.environ["MSSQL_PASSWORD"],
+        database=os.environ["MSSQL_DATABASE"],
         timeout=30, login_timeout=15
     )
 
 def spg_connect(autocommit=False):
     conn = psycopg2.connect(
-        host=os.environ["SPG_HOST"], port=5432,
-        user="snowflake_admin",
+        host=os.environ["SPG_HOST"],
+        port=int(os.environ.get("SPG_PORT", 5432)),
+        user=os.environ["SPG_USER"],
         password=os.environ["SPG_PASSWORD"],
-        dbname="postgres", sslmode="require", connect_timeout=15
+        dbname=os.environ["SPG_DATABASE"],
+        sslmode="require", connect_timeout=15
     )
     conn.autocommit = autocommit
     return conn
