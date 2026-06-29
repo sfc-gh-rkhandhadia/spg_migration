@@ -321,12 +321,12 @@ def spg_proc_exists(schema: str, proc_name: str) -> bool:
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description='Rollback-wrapped validation for write/modify procedures')
     parser.add_argument('--out', default=WRITE_PROC_OUTPUT_FILE,
                         help='Output JSONL path')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     print("=" * 70)
     print("WRITE PROCEDURE VALIDATION (rollback-wrapped — witness data safe)")

@@ -19,8 +19,8 @@ Required environment variables (must be set before running):
     MSSQL_PASSWORD    SQL Server password
     MSSQL_DATABASE    Database name (e.g. MyDatabase)
 
-    SPG_HOST          Postgres host (e.g. myhost.aws.postgres.snowflake.app)
-    SPG_USER          Postgres user (e.g. snowflake_admin)
+    SPG_HOST          Postgres host (set via environment variable)
+    SPG_USER          Postgres user
     SPG_PASSWORD      Postgres password
 
 Optional environment variables:
@@ -42,8 +42,8 @@ Example:
     export MSSQL_USER=sa
     export MSSQL_PASSWORD=YourPassword
     export MSSQL_DATABASE=MyDatabase
-    export SPG_HOST=yourhost.aws.postgres.snowflake.app
-    export SPG_USER=snowflake_admin
+    export SPG_HOST=<your-spg-host>
+    export SPG_USER=<your-spg-user>
     export SPG_PASSWORD=YourPassword
 
     python3 run.py --all
@@ -94,7 +94,7 @@ def run_procs():
     print("STEP: COMPARING OUTPUTS")
     print("=" * 70)
     from compare_proc_outputs import main as compare_main
-    compare_main()
+    compare_main([])
 
 
 def run_write_procs():
@@ -110,7 +110,7 @@ def run_write_procs():
     os.environ['VALIDATION_SKIP_WRITES'] = 'false'
     try:
         from validate_write_procs import main as write_main
-        write_main()
+        write_main([])
     finally:
         os.environ['VALIDATION_SKIP_WRITES'] = _orig
 
@@ -275,4 +275,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
