@@ -1,0 +1,18 @@
+[project]
+name = "mssql-spg-validation"
+version = "1.0.0"
+description = "Two-sided MSSQL → Snowflake Postgres parity validation skill"
+requires-python = ">=3.11"
+dependencies = [
+    "pymssql>=2.3.0",
+    "psycopg2-binary>=2.9.12",
+    "python-pptx>=0.6.23",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.0",
+]

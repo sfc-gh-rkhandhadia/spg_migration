@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  unit-tests:
+    name: Unit Tests (offline)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-cov pyyaml python-pptx
+
+      - name: Install pymssql
+        run: pip install pymssql psycopg2-binary
+        continue-on-error: true  # binary wheels may not exist for all platforms; tests stub DB anyway
+
+      - name: Run validation skill unit tests
+        run: |
+          pytest mssql_spg_migration_validation_testing/ \
+            -v --tb=short \
+            --cov=mssql_spg_migration_validation_testing/scripts \
+            --cov-report=term-missing \
+            --cov-fail-under=40
+
+      - name: Run DDL realization unit tests
+        run: |
+          pytest mssql-ddl-realization/tests/ \
+            -v --tb=short \
+            --cov=mssql-ddl-realization/scripts \
+            --cov-report=term-missing \
+            --cov-append

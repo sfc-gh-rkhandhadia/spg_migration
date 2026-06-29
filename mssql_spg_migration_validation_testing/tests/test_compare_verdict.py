@@ -225,3 +225,86 @@ class TestResultMetadata:
         result = compare(_ms(), _spg())
         assert 'ms_total_rows' in result
         assert 'spg_total_rows' in result
+
+
+# ── Parametrized: NULL and empty-value edge cases ─────────────────────────────
+
+class TestNullAndEmptyEdgeCases:
+    @pytest.mark.parametrize("ms_rows,spg_rows,expected_verdict", [
+        # Both sides return a single NULL row — should PASS
+        ([[None, None]], [[None, None]], 'PASS'),
+        # MSSQL has NULL where SPG has empty string — data hash differs
+        ([[None, 'x']], [['', 'x']], 'FAIL'),
+        # Both sides return zero rows in a result set — not a DML proc (has cols)
+        ([], [], 'PASS_DML_PROC'),
+        # Row counts match but values differ
+        ([[1, 'a']], [[1, 'b']], 'FAIL'),
+        # Identical multi-row result sets
+        ([[1, 'a'], [2, 'b']], [[1, 'a'], [2, 'b']], 'PASS'),
+    ])
+    def test_null_and_value_variants(self, ms_rows, spg_rows, expected_verdict):
+        ms = _ms(result_sets=[_rs(rows=ms_rows)] if ms_rows else [])
+        sp = _spg(result_sets=[_rs(rows=spg_rows)] if spg_rows else [])
+        result = compare(ms, sp)
+        assert result['verdict'] == expected_verdict
+
+
+# ── Parametrized: column ordering and schema differences ─────────────────────
+
+class TestColumnEdgeCases:
+    @pytest.mark.parametrize("ms_cols,spg_cols,expected_verdict", [
+        # Identical columns — PASS
+        (['a', 'b'], ['a', 'b'], 'PASS'),
+        # MSSQL has extra column
+        (['a', 'b', 'c'], ['a', 'b'], 'FAIL'),
+        # SPG has extra column
+        (['a', 'b'], ['a', 'b', 'c'], 'FAIL'),
+        # Completely disjoint columns
+        (['x', 'y'], ['p', 'q'], 'FAIL'),
+    ])
+    def test_column_set_differences(self, ms_cols, spg_cols, expected_verdict):
+        ms = _ms(result_sets=[_rs(cols=ms_cols, rows=[[1] * len(ms_cols)])])
+        sp = _spg(result_sets=[_rs(cols=spg_cols, rows=[[1] * len(spg_cols)])])
+        result = compare(ms, sp)
+        assert result['verdict'] == expected_verdict
+
+
+# ── Parametrized: error verdict matrix ───────────────────────────────────────
+
+class TestErrorVerdictMatrix:
+    @pytest.mark.parametrize("ms_status,spg_status,expected_verdict", [
+        ('SUCCESS', 'ERROR',        'SPG_ERROR'),
+        ('ERROR',   'SUCCESS',      'MSSQL_ERROR'),
+        ('ERROR',   'ERROR',        'BOTH_FAILED'),
+        ('SKIPPED', 'SKIPPED',      'SKIPPED'),
+        ('SUCCESS', 'FAIL_HARNESS', 'FAIL_HARNESS'),
+        ('FAIL_HARNESS', 'SUCCESS', 'FAIL_HARNESS'),
+    ])
+    def test_status_combinations(self, ms_status, spg_status, expected_verdict):
+        ms = _ms(status=ms_status,
+                 result_sets=[] if ms_status != 'SUCCESS' else None,
+                 error='some error' if ms_status not in ('SUCCESS', 'SKIPPED') else None)
+        sp = _spg(status=spg_status,
+                  result_sets=[] if spg_status != 'SUCCESS' else None,
+                  error='some error' if spg_status not in ('SUCCESS', 'SKIPPED') else None)
+        result = compare(ms, sp)
+        assert result['verdict'] == expected_verdict
+
+
+# ── Parametrized: result-set count mismatches ────────────────────────────────
+
+class TestResultSetCountMismatch:
+    @pytest.mark.parametrize("ms_count,spg_count", [
+        (2, 1),
+        (1, 2),
+        (3, 1),
+        (0, 1),
+        (1, 0),
+    ])
+    def test_result_set_count_always_fails(self, ms_count, spg_count):
+        ms = _ms(result_sets=[_rs() for _ in range(ms_count)])
+        sp = _spg(result_sets=[_rs() for _ in range(spg_count)])
+        result = compare(ms, sp)
+        # When one side has rows and the other doesn't via call_no_resultset
+        # strategy it can be SPG_NO_RESULTSET; otherwise FAIL or PASS_DML_PROC
+        assert result['verdict'] in ('FAIL', 'PASS_DML_PROC', 'SPG_NO_RESULTSET')

@@ -1,0 +1,19 @@
+repos:
+  - repo: local
+    hooks:
+      - id: block-credentials
+        name: Block hardcoded credentials and secrets
+        entry: python scripts/pre-commit.hook
+        language: python
+        pass_filenames: false
+        always_run: true
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: debug-statements
