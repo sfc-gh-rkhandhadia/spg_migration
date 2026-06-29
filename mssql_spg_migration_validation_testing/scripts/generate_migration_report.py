@@ -8,7 +8,7 @@ Usage:
     python3 generate_migration_report.py \
         --client "YourClientName" \
         --author "Rekha Khandhadia" \
-        --spg-host "REDACTED_SPG_HOST" \
+        --spg-host "$SPG_HOST" \
         --spg-password "your_password" \
         --run-numbers "1,2,3"          # optional: default = latest 3
 
